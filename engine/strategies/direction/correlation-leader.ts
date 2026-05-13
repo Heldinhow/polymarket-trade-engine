@@ -11,10 +11,10 @@ import type { Strategy, StrategyContext } from "../types.ts";
  *   BTC DOWN + SOL over-reacting → buy SOL DOWN
  */
 export const correlationLeader: Strategy = async (ctx) => {
-  const minCorr = parseFloat(Deno.env.get("CORRELATION_MIN_CORRELATION") ?? "0.75");
-  const minBtcProb = parseFloat(Deno.env.get("CORRELATION_MIN_BTC_PROB") ?? "0.55");
-  const maxEntryPrice = parseFloat(Deno.env.get("CORRELATION_MAX_ENTRY_PRICE") ?? "0.45");
-  const lookback = parseInt(Deno.env.get("CORRELATION_LOOKBACK_WINDOWS") ?? "10", 10);
+  const minCorr = parseFloat(process.env.get("CORRELATION_MIN_CORRELATION") ?? "0.75");
+  const minBtcProb = parseFloat(process.env.get("CORRELATION_MIN_BTC_PROB") ?? "0.55");
+  const maxEntryPrice = parseFloat(process.env.get("CORRELATION_MAX_ENTRY_PRICE") ?? "0.45");
+  const lookback = parseInt(process.env.get("CORRELATION_LOOKBACK_WINDOWS") ?? "10", 10);
 
   const release = ctx.hold();
   let lastRefresh = 0;

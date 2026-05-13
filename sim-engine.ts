@@ -106,6 +106,9 @@ class OrderBook {
   bestBidPrice(side: "UP" | "DOWN"): number | null {
     return this.bestBid(side)?.price ?? null;
   }
+  // Aliases used by strategies
+  bestAskInfo(side: "UP" | "DOWN"): PriceLevel | null { return this.bestAsk(side); }
+  bestBidInfo(side: "UP" | "DOWN"): PriceLevel | null { return this.bestBid(side); }
 }
 
 // ── Strategy Context ────────────────────────────────────────────────────────────
