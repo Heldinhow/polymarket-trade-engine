@@ -16,6 +16,7 @@ import {
 import { WalletTracker } from "./wallet-tracker.ts";
 import { TickerTracker } from "../tracker/ticker";
 import { Env } from "../utils/config.ts";
+import { buildDashboardLines } from "./dashboard.ts";
 
 const SAVE_INTERVAL_MS = 5000;
 
@@ -51,9 +52,8 @@ export class EarlyBird {
     alwaysLog = false,
   ) {
     this._prod = prod;
-    this._statePath = prod
-      ? "state/early-bird-prod.json"
-      : "state/early-bird.json";
+    this._statePath = (Env.get("SIM_STATE_FILE") ??
+        (prod ? "state/early-bird-prod.json" : "state/early-bird.json"));
     this._rounds = rounds;
     this._strategyName = strategyName ?? DEFAULT_STRATEGY;
     this._strategy = strategies[this._strategyName]!;
@@ -79,6 +79,7 @@ export class EarlyBird {
   }
 
   async start(): Promise<void> {
+    log.setDashboardProvider(() => this._dashboardLines());
     log.write("[startup] Starting");
     this._ticker.schedule();
     await this._ticker.waitForReady();
@@ -270,6 +271,8 @@ export class EarlyBird {
       this._saveState();
     }
 
+    log.refreshDashboard();
+
     // Auto-shutdown when all rounds complete and no lifecycles remain
     if (!this._shuttingDown && roundsExhausted && this._lifecycles.size === 0) {
       this._startShutdown(`All ${this._rounds} round(s) complete.`);
@@ -324,6 +327,25 @@ export class EarlyBird {
       sessionLoss: this._sessionLoss,
       activeMarkets,
       completedMarkets: this._completedMarkets,
+    });
+  }
+
+  private _dashboardLines(): string[] {
+    const assetConfig = Env.getAssetConfig();
+    const tracker = this._tracker;
+
+    return buildDashboardLines({
+      strategyName: this._strategyName,
+      prod: this._prod,
+      assetSymbol: assetConfig.apiSymbol,
+      marketWindow: Env.get("MARKET_WINDOW"),
+      sessionPnl: this._sessionPnl,
+      bankroll: tracker
+        ? { balance: tracker.balance, available: tracker.available }
+        : null,
+      lifecycles: [...this._lifecycles.values()].map(
+        (lifecycle) => lifecycle.dashboardSnapshot,
+      ),
     });
   }
 }
