@@ -360,47 +360,43 @@ async function main() {
     if (markets.length === 0) break;
 
     // ── 2. Select and setup market ───────────────────────────────────────
-    currentMarket = markets[0];
+    const mkt = markets[0];         // this is the raw event
+    const inner = mkt._market ?? mkt; // _market if available (from fetchMarkets), else raw event
+    currentMarket = mkt;
     const now = Date.now();
     lastMarketFetch = now;
 
-    // Fetch order book
-    try {
-      const assets = currentMarket.assets ?? [];
-      const up = assets.find((a: any) => a.side === "yes" || a.outcome?.toLowerCase().includes("up"));
-      const down = assets.find((a: any) => a.side === "no" || a.outcome?.toLowerCase().includes("down"));
-      if (up?.token_id && down?.token_id) {
+    // Use clobTokenIds from the market sub-object if available
+    const tokenIds: [string, string] = inner.clobTokenIds ?? ["", ""];
+    const marketEnd = inner.endDate ? new Date(inner.endDate).getTime() : now + SLOT_MS;
+
+    // Fetch order book via CLOB API
+    if (tokenIds[0] && tokenIds[1]) {
+      try {
         const [upBook, downBook] = await Promise.all([
-          fetch(`https://clob.polymarket.com/books/${up.token_id}`).then(r => r.json()).catch(() => null),
-          fetch(`https://clob.polymarket.com/books/${down.token_id}`).then(r => r.json()).catch(() => null),
+          fetch(`https://clob.polymarket.com/books/${tokenIds[0]}`).then(r => r.json()).catch(() => null),
+          fetch(`https://clob.polymarket.com/books/${tokenIds[1]}`).then(r => r.json()).catch(() => null),
         ]);
-        orderBook.bids.clear();
-        orderBook.asks.clear();
+        orderBook.bids.clear(); orderBook.asks.clear();
         if (upBook?.bids) for (const [p, s] of upBook.bids) orderBook.asks.set(parseFloat(p), parseFloat(s));
         if (downBook?.asks) for (const [p, s] of downBook.asks) orderBook.bids.set(parseFloat(p), parseFloat(s));
         if (upBook?.asks) for (const [p, s] of upBook.asks) orderBook.bids.set(parseFloat(p), parseFloat(s));
         if (downBook?.bids) for (const [p, s] of downBook.bids) orderBook.asks.set(parseFloat(p), parseFloat(s));
-      }
-    } catch { /* ignore OB errors */ }
+      } catch { /* ignore OB errors */ }
+    }
 
     // Update spot
     cachedSpot = await fetchSpotPrice();
 
     // ── 3. Determine slot timing ──────────────────────────────────────────
-    const marketEnd = new Date(currentMarket.end_timestamp_iso).getTime();
     const slotEndMs = Math.min(marketEnd, now + SLOT_MS);
     const slotStartMs = now;
     const remaining = Math.floor((slotEndMs - now) / 1000);
-    const slug = currentMarket.condition_id ?? `market-${currentRound}`;
-    const tokenIds: [string, string] = ["", ""];
-    try {
-      const assets = currentMarket.assets ?? [];
-      const up = assets.find((a: any) => a.side === "yes" || a.outcome?.toLowerCase().includes("up"));
-      const down = assets.find((a: any) => a.side === "no" || a.outcome?.toLowerCase().includes("down"));
-      tokenIds[0] = up?.token_id ?? ""; tokenIds[1] = down?.token_id ?? "";
-    } catch { /* ignore */ }
+    const slug = inner.conditionId ?? mkt.slug ?? `market-${currentRound}`;
 
     log(`round ${currentRound + 1}/${rounds}: ${slug} (${remaining}s remaining, spot=$${cachedSpot ?? "?"})`);
+    // Token IDs may also be stored in inner.clobTokenIds
+    const finalTokenIds: [string, string] = (inner.clobTokenIds ?? tokenIds) as [string, string];
 
     // ── 4. Run strategy ───────────────────────────────────────────────────
     pendingOrders.length = 0; orderHistory.length = 0; holds = 0;
