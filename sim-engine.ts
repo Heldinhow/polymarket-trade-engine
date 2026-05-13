@@ -175,18 +175,45 @@ async function loadStrategy(name: string): Promise<Strategy> {
 }
 
 // ── Market Fetcher ─────────────────────────────────────────────────────────────
-
+// Gamma API doesn't index recurring 5m markets by tag_slug.
+// We fetch by exact slug for current / nearby time slots and parse the nested market object.
 async function fetchMarkets(): Promise<any[]> {
   try {
-    const url = `https://gamma-api.polymarket.com/events?tag_slug=${ASSET}-${WINDOW}&active=true&closed=false&limit=10`;
-    const resp = await fetch(url);
-    if (!resp.ok) return [];
-    const data = await resp.json();
     const now = Date.now();
-    return (data as any[]).filter((e: any) => {
-      const end = new Date(e.end_timestamp_iso).getTime();
-      return end > now + 60_000; // must end in at least 1 min
-    });
+    // currentSlotMs = start of current 5-min window in ms
+    const currentSlotMs = Math.floor(now / 300_000) * 300_000;
+    // slotNum = index of 5-min window since epoch
+    const slotNum = Math.floor(currentSlotMs / 300_000);
+    // Slug uses seconds: (slotNum-2)*300 = just ended, (slotNum-1)*300 = active/ending soon, slotNum*300 = next
+    const slugCandidates = [
+      `btc-updown-5m-${(slotNum - 2) * 300}`,
+      `btc-updown-5m-${(slotNum - 1) * 300}`,
+      `btc-updown-5m-${slotNum * 300}`,
+    ];
+    const results = [];
+    for (const slug of slugCandidates) {
+      try {
+        const resp = await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`);
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        const events: any[] = Array.isArray(data) ? data : [data].filter(Boolean);
+        for (const evt of events) {
+          if (!evt?.slug) continue;
+          // The market lives in evt.markets[0]; end time is in the market object
+          const mkt = evt.markets?.[0];
+          if (!mkt) continue;
+          // Accept if market is accepting orders and ends in >1 min
+          if (mkt.acceptingOrders !== true) continue;
+          // Use market.endDate (full ISO string like "2026-05-13T10:20:00Z"), not endDateIso ("2026-05-13")
+          const endMs = mkt.endDate ? new Date(mkt.endDate).getTime() : 0;
+          if (endMs > now + 60_000) {
+            // Attach market data onto event for downstream use
+            results.push({ ...evt, _market: mkt });
+          }
+        }
+      } catch { /* skip bad slugs */ }
+    }
+    return results;
   } catch { return []; }
 }
 

@@ -122,12 +122,24 @@ let runs = [];
 let chart = null;
 
 async function loadData() {
+  const el = document.getElementById('updated');
+  if (el) el.textContent = 'Fetching...';
   try {
     const resp = await fetch('/api/sim-runs');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     runs = await resp.json();
-  } catch {
-    // fallback: fetch from filesystem via relative path
-    runs = [];
+  } catch (err) {
+    console.error('[dashboard] fetch error:', err);
+    const tbody = document.getElementById('tbody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="9" class="no-data">
+        ⚠️ Could not load runs.<br>
+        <small>Error: ${err.message}</small><br>
+        <p>Make sure the dashboard server is running:<br>
+        <code>cd polymarket-trade-engine && bun run dashboard-server.ts</code></p>
+      </td></tr>`;
+    }
+    return;
   }
   render();
 }
@@ -163,11 +175,11 @@ function render() {
     </div>
     <div class="stat-card">
       <div class="value green">${best ? '+' + best.sessionPnl.toFixed(2) : '-'}</div>
-      <div class="label">Best — ${best ? STRATEGIES[best.strategy]?.label || best.strategy : '' : ''}</div>
+      <div class="label">Best — ${best ? (STRATEGIES[best.strategy]?.label || best.strategy) : ''}</div>
     </div>
     <div class="stat-card">
       <div class="value red">${worst ? (worst.sessionPnl >= 0 ? '+' : '') + worst.sessionPnl.toFixed(2) : '-'}</div>
-      <div class="label">Worst — ${worst ? STRATEGIES[worst.strategy]?.label || worst.strategy : '' : ''}</div>
+      <div class="label">Worst — ${worst ? (STRATEGIES[worst.strategy]?.label || worst.strategy) : ''}</div>
     </div>
   `;
 
@@ -320,7 +332,17 @@ async function deleteRun(runId) {
 // Auto-refresh every 10s
 setInterval(loadData, 10000);
 window.addEventListener('resize', renderChart);
-loadData();
+
+// Debug: show what URL is being fetched
+console.log('[dashboard] base URL:', window.location.origin);
+fetch('/api/sim-runs').then(r => r.json()).then(data => {
+  console.log('[dashboard] fetched', data.length, 'runs');
+  runs = data;
+  render();
+}).catch(err => {
+  console.error('[dashboard] fetch failed:', err);
+  document.getElementById('updated').textContent = 'Fetch error: ' + err.message;
+});
 </script>
 </body>
 </html>
