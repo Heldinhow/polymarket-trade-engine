@@ -5,7 +5,7 @@
  * Chunks: 20% / 30% / 50% ou DCA progressivo.
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type ChunkedEntriesConfig = {
   enabled: boolean;

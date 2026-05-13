@@ -10,7 +10,7 @@
  *   => entra UP
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type ClobMomentumConfig = {
   enabled: boolean;

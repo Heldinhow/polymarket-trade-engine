@@ -13,6 +13,11 @@ import type { WalletTracker } from "./wallet-tracker.ts";
 import type { TickerTracker } from "../tracker/ticker";
 import { slotFromSlug } from "../utils/slot.ts";
 import type { UserChannel } from "./user-channel.ts";
+import type {
+  DashboardPosition,
+  LifecycleDashboardSnapshot,
+  StrategyTelemetry,
+} from "./dashboard.ts";
 
 export type LifecycleState = "INIT" | "RUNNING" | "STOPPING" | "DONE";
 
@@ -89,6 +94,7 @@ export class MarketLifecycle {
   private _marketOpenTimer: ReturnType<typeof setTimeout> | null = null;
   private _marketPriceHandle: { cancel: () => void } | null = null;
   private _strategyCleanup: (() => void) | null = null;
+  private _strategyTelemetry: StrategyTelemetry = {};
 
   readonly slug: string;
   private readonly apiQueue: APIQueue;
@@ -178,6 +184,20 @@ export class MarketLifecycle {
   }
   get strategyName(): string {
     return this._strategyName;
+  }
+
+  get dashboardSnapshot(): LifecycleDashboardSnapshot {
+    return {
+      slug: this.slug,
+      state: this._state,
+      remainingSecs: this.remainingSecs,
+      pendingBuyCount: this._pendingOrders.filter((o) => o.action === "buy")
+        .length,
+      pendingSellCount: this._pendingOrders.filter((o) => o.action === "sell")
+        .length,
+      position: this._positionSnapshot(),
+      telemetry: this._strategyTelemetry,
+    };
   }
 
   /** Returns orderbook snapshot for a tokenId owned by this lifecycle. */
@@ -348,6 +368,9 @@ export class MarketLifecycle {
       getMarketResult: () => {
         const slot = slotFromSlug(this.slug);
         return this.apiQueue.marketResult.get(slot.startTime);
+      },
+      setTelemetry: (telemetry) => {
+        this._strategyTelemetry = { ...this._strategyTelemetry, ...telemetry };
       },
     };
 
@@ -917,6 +940,37 @@ export class MarketLifecycle {
       if (shares > 0) return true;
     }
     return false;
+  }
+
+  private _positionSnapshot(): DashboardPosition | null {
+    if (!this._clobTokenIds) return null;
+
+    for (const tokenId of this._clobTokenIds) {
+      let boughtShares = 0;
+      let buyCost = 0;
+      let soldShares = 0;
+
+      for (const order of this._orderHistory) {
+        if (order.tokenId !== tokenId) continue;
+        if (order.action === "buy") {
+          boughtShares += order.shares;
+          buyCost += order.price * order.shares;
+        } else {
+          soldShares += order.shares;
+        }
+      }
+
+      const netShares = boughtShares - soldShares;
+      if (netShares > 0 && boughtShares > 0) {
+        return {
+          side: tokenId === this._clobTokenIds[0] ? "UP" : "DOWN",
+          shares: parseFloat(netShares.toFixed(4)),
+          entryPrice: parseFloat((buyCost / boughtShares).toFixed(4)),
+        };
+      }
+    }
+
+    return null;
   }
 
   private async _autoRedeem(): Promise<void> {

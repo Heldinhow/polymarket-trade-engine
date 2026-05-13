@@ -9,7 +9,7 @@
  *   => compra DOWN esperando reversão
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type MeanReversionConfig = {
   enabled: boolean;

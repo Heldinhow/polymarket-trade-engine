@@ -6,7 +6,7 @@
  * Objetivo: virar maker e conseguir fill melhor.
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type GtcRestingConfig = {
   enabled: boolean;

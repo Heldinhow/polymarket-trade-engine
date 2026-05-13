@@ -5,7 +5,7 @@
  * Economicamente equivalente, mas às vezes tem liquidez melhor no lado oposto.
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type SyntheticConfig = {
   enabled: boolean;

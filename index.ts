@@ -52,7 +52,8 @@ const opts = program.opts<{
   alwaysLog?: boolean;
 }>();
 
-acquireProcessLock("early-bird");
+const lockName = `early-bird-${process.env.SIM_RUN_ID ?? process.env.MARKET_ASSET ?? "btc"}`;
+acquireProcessLock(lockName);
 
 if (!strategies[opts.strategy]) {
   console.error(`Unknown strategy: "${opts.strategy}"`);

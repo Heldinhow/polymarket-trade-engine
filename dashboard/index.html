@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolySim Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; color: #58a6ff; }
+  header .meta { font-size: 12px; color: #7d8590; }
+  .toolbar { display: flex; gap: 12px; align-items: center; }
+  .toolbar button { background: #238636; color: #fff; border: 1px solid #2ea043; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .toolbar button:hover { background: #2ea043; }
+  .toolbar button.refresh { background: #1f6feb; border-color: #1f6feb; }
+  .toolbar button.refresh:hover { background: #388bfd; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 24px; }
+  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+  .stat-card .value { font-size: 28px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: #7d8590; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .stat-card .value.green { color: #3fb950; }
+  .stat-card .value.red { color: #f85149; }
+  .stat-card .value.neutral { color: #e6edf3; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #7d8590; border-bottom: 1px solid #30363d; position: sticky; top: 0; background: #0d1117; }
+  td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #21262d; }
+  tr:hover td { background: #161b22; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .tag-direction { background: #1f2d4e; color: #58a6ff; }
+  .tag-execution { background: #2d2d1f; color: #d29922; }
+  .tag-risk { background: #2d1f2d; color: #bc8cff; }
+  .tag-original { background: #1f3d2d; color: #3fb950; }
+  .pnl { font-weight: 600; }
+  .pnl.pos { color: #3fb950; }
+  .pnl.neg { color: #f85149; }
+  .pnl.neu { color: #7d8590; }
+  .badge { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .badge.running { background: #d29922; animation: pulse 1.5s infinite; }
+  .badge.done { background: #3fb950; }
+  .badge.error { background: #f85149; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .progress-bar { width: 80px; height: 4px; background: #30363d; border-radius: 2px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+  .progress-bar .fill { height: 100%; background: #58a6ff; transition: width 0.3s; }
+  .no-data { text-align: center; padding: 60px; color: #7d8590; }
+  .no-data p { margin-top: 12px; font-size: 14px; }
+  #chart-container { padding: 20px 24px; }
+  #chart { width: 100%; height: 300px; }
+  canvas { display: block; }
+  .category { margin-bottom: 8px; font-size: 12px; color: #7d8590; border-left: 3px solid; padding-left: 8px; margin-bottom: 12px; }
+  .category.dir { border-color: #58a6ff; }
+  .category.exec { border-color: #d29922; }
+  .category.risk { border-color: #bc8cff; }
+  .category.orig { border-color: #3fb950; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 PolySim Dashboard</h1>
+    <div class="meta" id="updated">Loading...</div>
+  </div>
+  <div class="toolbar">
+    <button class="refresh" onclick="loadData()">🔄 Refresh</button>
+    <button onclick="startAll()">▶ Launch All Strategies</button>
+  </div>
+</header>
+
+<div class="summary" id="summary"></div>
+
+<div id="chart-container">
+  <canvas id="chart"></canvas>
+</div>
+
+<div style="padding: 0 24px 20px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Strategy</th>
+        <th>Category</th>
+        <th>Rounds</th>
+        <th>Balance</th>
+        <th>P&L</th>
+        <th>Win Rate</th>
+        <th>Trades</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const STRATEGIES = {
+  // Direction
+  "correlation-leader": { cat: "direction", label: "Correlation Leader" },
+  "near-resolution": { cat: "direction", label: "Near Resolution 99c" },
+  "momentum-continuation": { cat: "direction", label: "Momentum Continuation" },
+  "mean-reversion": { cat: "direction", label: "Mean Reversion" },
+  "clob-momentum": { cat: "direction", label: "CLOB Momentum" },
+  "spot-distance": { cat: "direction", label: "Spot Distance" },
+  "time-weighted": { cat: "direction", label: "Time Weighted" },
+  "day-hour-edge": { cat: "direction", label: "Day/Hour Edge" },
+  // Execution
+  "fak-sniper": { cat: "execution", label: "FAK Sniper" },
+  "gtc-resting": { cat: "execution", label: "GTC Resting" },
+  "synthetic-opposite": { cat: "execution", label: "Synthetic Opposite" },
+  "chunked-entries": { cat: "execution", label: "Chunked Entries" },
+  // Risk
+  "dynamic-stop": { cat: "risk", label: "Dynamic Stop" },
+  "timeout-exit": { cat: "risk", label: "Timeout Exit" },
+  // Original
+  "late-entry": { cat: "original", label: "Late Entry" },
+  "two-sided-tp": { cat: "original", label: "Two-Sided TP" },
+  "eth-btc-correlation-tp": { cat: "original", label: "ETH-BTC Corr TP" },
+  "simulation": { cat: "original", label: "Simulation" },
+};
+
+let runs = [];
+let chart = null;
+
+async function loadData() {
+  try {
+    const resp = await fetch('/api/sim-runs');
+    runs = await resp.json();
+  } catch {
+    // fallback: fetch from filesystem via relative path
+    runs = [];
+  }
+  render();
+}
+
+function render() {
+  const now = new Date().toLocaleTimeString();
+  document.getElementById('updated').textContent = `Updated ${now}`;
+
+  // Summary stats
+  const completed = runs.filter(r => r.isCompleted);
+  const totalPnl = completed.reduce((s, r) => s + (r.sessionPnl || 0), 0);
+  const avgPnl = completed.length ? totalPnl / completed.length : 0;
+  const best = completed.length ? completed.reduce((b, r) => (r.sessionPnl > (b?.sessionPnl ?? -Infinity)) ? r : b, null) : null;
+  const worst = completed.length ? completed.reduce((w, r) => (r.sessionPnl < (w?.sessionPnl ?? Infinity)) ? r : w, null) : null;
+  const running = runs.filter(r => !r.isCompleted && !r.error).length;
+
+  document.getElementById('summary').innerHTML = `
+    <div class="stat-card">
+      <div class="value neutral">${runs.length}</div>
+      <div class="label">Total Runs</div>
+    </div>
+    <div class="stat-card">
+      <div class="value neutral">${running}</div>
+      <div class="label">Running</div>
+    </div>
+    <div class="stat-card">
+      <div class="value ${totalPnl >= 0 ? 'green' : 'red'}">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</div>
+      <div class="label">Total P&L</div>
+    </div>
+    <div class="stat-card">
+      <div class="value ${avgPnl >= 0 ? 'green' : 'red'}">${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}</div>
+      <div class="label">Avg P&L</div>
+    </div>
+    <div class="stat-card">
+      <div class="value green">${best ? '+' + best.sessionPnl.toFixed(2) : '-'}</div>
+      <div class="label">Best — ${best ? STRATEGIES[best.strategy]?.label || best.strategy : '' : ''}</div>
+    </div>
+    <div class="stat-card">
+      <div class="value red">${worst ? (worst.sessionPnl >= 0 ? '+' : '') + worst.sessionPnl.toFixed(2) : '-'}</div>
+      <div class="label">Worst — ${worst ? STRATEGIES[worst.strategy]?.label || worst.strategy : '' : ''}</div>
+    </div>
+  `;
+
+  // Table
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+
+  for (const run of runs) {
+    const info = STRATEGIES[run.strategy] || { cat: 'original', label: run.strategy };
+    const pnl = run.sessionPnl || 0;
+    const wr = run.totalTrades > 0 ? (run.winningTrades / run.totalTrades * 100).toFixed(0) + '%' : '—';
+    const rounds = run.isCompleted ? `${run.rounds}/${run.rounds}` : `${run.trades?.length || 0}/${run.rounds}`;
+    const pct = run.rounds > 0 ? ((run.trades?.length || 0) / run.rounds * 100) : 0;
+    const balance = run.currentBalance ?? run.startingBalance ?? 50;
+    const pnlClass = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neu';
+    const statusClass = run.isCompleted ? 'done' : run.error ? 'error' : 'running';
+    const statusLabel = run.isCompleted ? '✓' : run.error ? '✗' : '○';
+
+    const catClass = info.cat === 'direction' ? 'dir' : info.cat === 'execution' ? 'exec' : info.cat === 'risk' ? 'risk' : 'orig';
+    const tagClass = info.cat === 'direction' ? 'tag-direction' : info.cat === 'execution' ? 'tag-execution' : info.cat === 'risk' ? 'tag-risk' : 'tag-original';
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><span class="badge ${statusClass}"></span>${statusLabel}</td>
+      <td><strong>${info.label}</strong><br><span style="font-size:11px;color:#7d8590">${run.strategy}</span></td>
+      <td><span class="tag ${tagClass}">${info.cat}</span></td>
+      <td>
+        <div class="progress-bar"><div class="fill" style="width:${Math.min(100, pct)}%"></div></div>
+        ${rounds}
+      </td>
+      <td class="pnl ${pnlClass}">$${balance.toFixed(2)}</td>
+      <td class="pnl ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
+      <td>${wr}</td>
+      <td>${run.totalTrades || 0}</td>
+      <td>
+        <button onclick="stopRun('${run.runId}')" style="background:#b01c1c;border:none;color:#fff;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;margin-right:4px">Stop</button>
+        <button onclick="deleteRun('${run.runId}')" style="background:#30363d;border:none;color:#e6edf3;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px">Del</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  }
+
+  if (runs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="no-data">
+      No simulations running.<br><p>Click <b>▶ Launch All Strategies</b> to start all strategies in parallel.</p>
+    </td></tr>`;
+  }
+
+  renderChart();
+}
+
+function renderChart() {
+  const canvas = document.getElementById('chart');
+  if (!canvas) return;
+  const completed = runs.filter(r => r.isCompleted && r.sessionPnl !== undefined).sort((a, b) => b.sessionPnl - a.sessionPnl);
+  if (completed.length === 0) return;
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.parentElement.clientWidth;
+  const h = 280;
+  canvas.width = w;
+  canvas.height = h;
+
+  const max = Math.max(...completed.map(r => Math.abs(r.sessionPnl)));
+  const barW = Math.min(40, (w - 60) / completed.length - 8);
+  const startX = 50;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = 20 + (h - 40) * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(startX, y);
+    ctx.lineTo(w - 10, y);
+    ctx.stroke();
+    const label = (max - max * 2 * i / 4).toFixed(1);
+    ctx.fillStyle = '#7d8590';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText(label, startX - 5, y + 4);
+  }
+
+  // Zero line
+  const zeroY = 20 + (h - 40) * (max / (max * 2));
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(startX, zeroY);
+  ctx.lineTo(w - 10, zeroY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bars
+  completed.forEach((run, i) => {
+    const x = startX + i * (barW + 8) + 4;
+    const pnl = run.sessionPnl;
+    const barH = (Math.abs(pnl) / (max * 2)) * (h - 40);
+    const y = pnl >= 0 ? zeroY - barH : zeroY;
+    const color = pnl >= 0 ? '#3fb950' : '#f85149';
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [3, 3, 0, 0]);
+    ctx.fill();
+
+    // Label
+    const info = STRATEGIES[run.strategy] || { label: run.strategy };
+    const shortLabel = info.label.split(' ').map(w => w[0]).join('');
+    ctx.fillStyle = '#7d8590';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate(x + barW / 2, h - 2);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(shortLabel, 0, 0);
+    ctx.restore();
+
+    // Value
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText((pnl >= 0 ? '+' : '') + pnl.toFixed(1), x + barW / 2, pnl >= 0 ? y - 4 : y + barH + 14);
+  });
+}
+
+async function startAll() {
+  const strategyList = Object.keys(STRATEGIES);
+  for (const strat of strategyList) {
+    try {
+      await fetch(`/api/sim/start-batch?strategies=${strat}&rounds=20`, { method: 'POST' });
+    } catch(e) { console.error(e); }
+  }
+  setTimeout(loadData, 2000);
+}
+
+async function stopRun(runId) {
+  try { await fetch(`/api/sim/stop/${runId}`, { method: 'POST' }); } catch(e) {}
+  setTimeout(loadData, 500);
+}
+
+async function deleteRun(runId) {
+  try { await fetch(`/api/sim/delete/${runId}`, { method: 'DELETE' }); } catch(e) {}
+  setTimeout(loadData, 500);
+}
+
+// Auto-refresh every 10s
+setInterval(loadData, 10000);
+window.addEventListener('resize', renderChart);
+loadData();
+</script>
+</body>
+</html>

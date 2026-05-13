@@ -11,7 +11,7 @@
  * Recomendado: 15-30 segundos para mercados <5m
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type TimeoutExitConfig = {
   enabled: boolean;

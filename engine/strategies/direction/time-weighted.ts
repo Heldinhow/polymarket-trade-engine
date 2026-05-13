@@ -9,7 +9,7 @@
  *   => aumenta score de UP
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type TimeWeightedConfig = {
   enabled: boolean;

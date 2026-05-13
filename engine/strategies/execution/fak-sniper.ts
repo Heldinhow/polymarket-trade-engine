@@ -6,7 +6,7 @@
  * Boa para velocidade / scalp.
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type FakSniperConfig = {
   enabled: boolean;

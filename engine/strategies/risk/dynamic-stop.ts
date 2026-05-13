@@ -9,7 +9,7 @@
  * Usa ctx.hold() para monitorizar e ajustar stop dinamicamente.
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type DynamicStopConfig = {
   enabled: boolean;

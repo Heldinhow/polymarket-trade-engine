@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
+import { TerminalDashboard } from "../utils/terminal.ts";
 
 export type LogColor = "green" | "yellow" | "red" | "cyan" | "dim";
 
@@ -19,6 +20,8 @@ function nowIso(): string {
 class Log {
   private readonly _filePath: string;
   private _buffer: string[] = [];
+  private _dashboardProvider: (() => string[]) | null = null;
+  private readonly _terminal = new TerminalDashboard();
 
   constructor() {
     mkdirSync("logs", { recursive: true });
@@ -32,9 +35,24 @@ class Log {
 
   write(msg: string, color?: LogColor): void {
     const plain = `[${nowIso()}] ${msg}`;
-    const console_line = color ? `${ANSI[color]}${plain}${RESET}` : plain;
-    console.log(console_line);
+    if (this._dashboardProvider) {
+      this.refreshDashboard();
+      this._terminal.log(plain, color);
+    } else {
+      const console_line = color ? `${ANSI[color]}${plain}${RESET}` : plain;
+      console.log(console_line);
+    }
     this._buffer.push(plain + "\n");
+  }
+
+  setDashboardProvider(provider: (() => string[]) | null): void {
+    this._dashboardProvider = provider;
+    this.refreshDashboard();
+  }
+
+  refreshDashboard(): void {
+    if (!this._dashboardProvider) return;
+    this._terminal.update(this._dashboardProvider());
   }
 
   flush(): void {

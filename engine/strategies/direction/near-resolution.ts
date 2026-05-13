@@ -9,7 +9,7 @@
  *   contrarian  — aposta contra spike exagerado
  */
 import type { Strategy, StrategyContext } from "../types.ts";
-import { Env } from "../../utils/config.ts";
+import { Env } from "../../../utils/config.ts";
 
 type NearResolutionConfig = {
   nearResolutionPrice: number;   // e.g. 0.97
